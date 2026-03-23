@@ -142,6 +142,29 @@ describe("database", () => {
     expect(results.map(r => r.retailer_id)).toEqual([1, 3]);
   });
 
+  it("excludes member-only prices by default", () => {
+    upsertSpecials(db, [
+      makeSpecial({ salefinderId: "1", memberPrice: false, salePriceCents: 500 }),
+      makeSpecial({ salefinderId: "2", memberPrice: true, salePriceCents: 300 }),
+    ]);
+
+    const results = querySpecials(db, {});
+    expect(results).toHaveLength(1);
+    expect(results[0]?.sale_price_cents).toBe(500);
+  });
+
+  it("includes member prices for specified retailers only", () => {
+    upsertSpecials(db, [
+      makeSpecial({ salefinderId: "1", retailerId: 1, memberPrice: true, salePriceCents: 300 }),
+      makeSpecial({ salefinderId: "2", retailerId: 2, memberPrice: true, salePriceCents: 200 }),
+      makeSpecial({ salefinderId: "3", retailerId: 1, memberPrice: false, salePriceCents: 500 }),
+    ]);
+
+    const results = querySpecials(db, { memberRetailerIds: [1] });
+    expect(results).toHaveLength(2);
+    expect(results.map(r => r.retailer_id)).toEqual([1, 1]);
+  });
+
   it("excludes items with null sale_price_cents", () => {
     upsertSpecials(db, [
       makeSpecial({ salefinderId: "1", salePriceCents: 300 }),
