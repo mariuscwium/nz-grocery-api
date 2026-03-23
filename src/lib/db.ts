@@ -82,6 +82,28 @@ export function upsertSpecials(db: Database.Database, specials: Special[]): numb
   return upsertMany(specials);
 }
 
+export interface Retailer {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+export function upsertRetailers(db: Database.Database, retailers: Retailer[]): void {
+  const stmt = db.prepare(`
+    INSERT INTO retailers (id, name, slug)
+    VALUES (@id, @name, @slug)
+    ON CONFLICT(id) DO UPDATE SET name = excluded.name, slug = excluded.slug
+  `);
+
+  const upsertMany = db.transaction((items: Retailer[]) => {
+    for (const item of items) {
+      stmt.run(item);
+    }
+  });
+
+  upsertMany(retailers);
+}
+
 export interface SpecialRow {
   id: number;
   product_name: string;

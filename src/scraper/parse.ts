@@ -2,6 +2,36 @@ import * as cheerio from "cheerio";
 import { parsePrice } from "./prices.js";
 import type { Special } from "../lib/types.js";
 
+export interface Retailer {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+export function parseRetailers(html: string): Retailer[] {
+  const $ = cheerio.load(html);
+  const seen = new Map<number, Retailer>();
+
+  $(".item-retailer-logo-top").each((_, el) => {
+    const img = $(el).find("img");
+    const href = $(el).find("a").attr("href") ?? "";
+    const name = img.attr("alt") ?? "";
+    const src = img.attr("src") ?? "";
+
+    const idMatch = /retailerlogos\/(\d+)\./.exec(src);
+    if (!idMatch?.[1] || !name) return;
+
+    const id = parseInt(idMatch[1], 10);
+    const slug = href.replace(/^\//, "").replace(/-catalogue$/, "").toLowerCase();
+
+    if (!seen.has(id)) {
+      seen.set(id, { id, name, slug });
+    }
+  });
+
+  return [...seen.values()];
+}
+
 export function parseItems(html: string, categoryId: number, region: string): Special[] {
   const $ = cheerio.load(html);
   const items: Special[] = [];

@@ -21,16 +21,16 @@ describe("scrapeCategory", () => {
   it("scrapes a single page of results", async () => {
     fetcher.addPage("/food-and-beverage/groceries/c-191", 1, fixture);
 
-    const items = await scrapeCategory(
+    const result = await scrapeCategory(
       deps,
       191,
       "/food-and-beverage/groceries/c-191",
       "Canterbury",
     );
 
-    expect(items.length).toBeGreaterThan(0);
-    expect(items[0]?.categoryId).toBe(191);
-    expect(items[0]?.region).toBe("Canterbury");
+    expect(result.specials.length).toBeGreaterThan(0);
+    expect(result.specials[0]?.categoryId).toBe(191);
+    expect(result.specials[0]?.region).toBe("Canterbury");
   });
 
   it("passes region to fetcher", async () => {
@@ -56,9 +56,9 @@ describe("scrapeCategory", () => {
     fetcher.addPage("/test/c-1", 2, fixture);
     // Page 3 empty, stops
 
-    const items = await scrapeCategory(deps, 1, "/test/c-1", "Canterbury");
+    const result = await scrapeCategory(deps, 1, "/test/c-1", "Canterbury");
 
-    expect(items.length).toBeGreaterThan(12);
+    expect(result.specials.length).toBeGreaterThan(12);
     expect(fetcher.calls.length).toBe(3);
   });
 });
@@ -80,9 +80,9 @@ describe("scrapeAll", () => {
     fetcher.addPage("/home-and-living/home-essentials/c-168", 1, fixture);
     fetcher.addPage("/health-and-beauty/healthcare-and-medications/c-129", 1, fixture);
 
-    const items = await scrapeAll(deps, "Canterbury");
+    const result = await scrapeAll(deps, "Canterbury");
 
-    expect(items.length).toBeGreaterThan(0);
+    expect(result.specials.length).toBeGreaterThan(0);
 
     const paths = fetcher.calls.map((c) => c.path);
     expect(paths).toContain("/food-and-beverage/groceries/c-191");
@@ -91,13 +91,28 @@ describe("scrapeAll", () => {
     expect(paths).toContain("/health-and-beauty/healthcare-and-medications/c-129");
   });
 
+  it("extracts retailers from scraped pages", async () => {
+    fetcher.addPage("/food-and-beverage/groceries/c-191", 1, fixture);
+    fetcher.addPage("/food-and-beverage/beverages/c-190", 1, fixture);
+    fetcher.addPage("/home-and-living/home-essentials/c-168", 1, fixture);
+    fetcher.addPage("/health-and-beauty/healthcare-and-medications/c-129", 1, fixture);
+
+    const result = await scrapeAll(deps, "Canterbury");
+
+    expect(result.retailers.length).toBeGreaterThan(0);
+    for (const r of result.retailers) {
+      expect(r.name.length).toBeGreaterThan(0);
+      expect(r.slug.length).toBeGreaterThan(0);
+    }
+  });
+
   it("returns items from multiple categories", async () => {
     fetcher.addPage("/food-and-beverage/groceries/c-191", 1, fixture);
     fetcher.addPage("/food-and-beverage/beverages/c-190", 1, fixture);
 
-    const items = await scrapeAll(deps, "Canterbury");
+    const result = await scrapeAll(deps, "Canterbury");
 
-    const categoryIds = new Set(items.map((i) => i.categoryId));
+    const categoryIds = new Set(result.specials.map((i) => i.categoryId));
     expect(categoryIds.has(191)).toBe(true);
     expect(categoryIds.has(190)).toBe(true);
   });

@@ -1,18 +1,25 @@
 import { createFetcher } from "./fetch.js";
-import { parseItems, hasNextPage } from "./parse.js";
+import { parseItems, parseRetailers, hasNextPage } from "./parse.js";
+import type { Retailer } from "./parse.js";
 import { CATEGORIES } from "../lib/types.js";
 import type { Special } from "../lib/types.js";
 import type { Deps } from "../lib/deps.js";
 
 const MAX_PAGES = 30;
 
+export interface ScrapeResult {
+  specials: Special[];
+  retailers: Retailer[];
+}
+
 export async function scrapeCategory(
   deps: Deps,
   categoryId: number,
   path: string,
   region: string,
-): Promise<Special[]> {
+): Promise<ScrapeResult> {
   const allItems: Special[] = [];
+  const retailerMap = new Map<number, Retailer>();
 
   for (let page = 1; page <= MAX_PAGES; page++) {
     const html = await deps.fetcher.fetch(path, page, region);
@@ -21,25 +28,33 @@ export async function scrapeCategory(
     if (items.length === 0) break;
     allItems.push(...items);
 
+    for (const r of parseRetailers(html)) {
+      if (!retailerMap.has(r.id)) retailerMap.set(r.id, r);
+    }
+
     if (!hasNextPage(html, page)) break;
   }
 
-  return allItems;
+  return { specials: allItems, retailers: [...retailerMap.values()] };
 }
 
-export async function scrapeAll(deps: Deps, region: string): Promise<Special[]> {
+export async function scrapeAll(deps: Deps, region: string): Promise<ScrapeResult> {
   const allSpecials: Special[] = [];
+  const retailerMap = new Map<number, Retailer>();
 
   for (const cat of CATEGORIES) {
-    const items = await scrapeCategory(deps, cat.id, cat.path, region);
-    allSpecials.push(...items);
+    const result = await scrapeCategory(deps, cat.id, cat.path, region);
+    allSpecials.push(...result.specials);
+    for (const r of result.retailers) {
+      if (!retailerMap.has(r.id)) retailerMap.set(r.id, r);
+    }
   }
 
-  return allSpecials;
+  return { specials: allSpecials, retailers: [...retailerMap.values()] };
 }
 
 async function main(): Promise<void> {
-  const { createDb, upsertSpecials } = await import("../lib/db.js");
+  const { createDb, upsertSpecials, upsertRetailers } = await import("../lib/db.js");
   const region = process.env["REGION"] ?? "Canterbury";
   const dbPath = process.env["DB_PATH"] ?? "specials.db";
   const deps: Deps = {
@@ -47,11 +62,12 @@ async function main(): Promise<void> {
     output: { write: (data: string) => process.stdout.write(data) },
   };
 
-  const specials = await scrapeAll(deps, region);
+  const result = await scrapeAll(deps, region);
   const db = createDb(dbPath);
-  const count = upsertSpecials(db, specials);
+  upsertRetailers(db, result.retailers);
+  const count = upsertSpecials(db, result.specials);
   db.close();
-  deps.output.write(`Scraped ${String(count)} specials into ${dbPath}\n`);
+  deps.output.write(`Scraped ${String(count)} specials, ${String(result.retailers.length)} retailers into ${dbPath}\n`);
 }
 
 void main();

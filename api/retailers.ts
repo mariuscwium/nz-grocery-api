@@ -10,8 +10,8 @@ export default function handler(req: VercelRequest, res: VercelResponse): void {
   }
 
   const rows = db
-    .prepare("SELECT DISTINCT retailer_id as id FROM specials ORDER BY id")
-    .all() as Array<{ id: number }>;
+    .prepare("SELECT id, name, slug FROM retailers ORDER BY name")
+    .all() as Array<{ id: number; name: string; slug: string }>;
 
   res.status(200).json({ retailers: rows });
 }

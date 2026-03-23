@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
-import { parseItems, hasNextPage } from "../src/scraper/parse.js";
+import { parseItems, parseRetailers, hasNextPage } from "../src/scraper/parse.js";
 
 const fixture = readFileSync("tests/fixtures/groceries-page1.html", "utf-8");
 
@@ -53,6 +53,37 @@ describe("parseItems", () => {
     const items = parseItems(fixture, 191, "Canterbury");
     const withUrls = items.filter((i) => i.buyUrl.startsWith("http"));
     expect(withUrls.length).toBeGreaterThan(0);
+  });
+});
+
+describe("parseRetailers", () => {
+  it("extracts distinct retailers from HTML", () => {
+    const retailers = parseRetailers(fixture);
+    expect(retailers.length).toBeGreaterThan(0);
+  });
+
+  it("extracts retailer id, name, and slug", () => {
+    const retailers = parseRetailers(fixture);
+    for (const r of retailers) {
+      expect(r.id).toBeGreaterThan(0);
+      expect(r.name.length).toBeGreaterThan(0);
+      expect(r.slug.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("deduplicates retailers", () => {
+    const retailers = parseRetailers(fixture);
+    const ids = retailers.map((r) => r.id);
+    expect(ids.length).toBe(new Set(ids).size);
+  });
+
+  it("derives slug from catalogue href", () => {
+    const retailers = parseRetailers(fixture);
+    for (const r of retailers) {
+      expect(r.slug).not.toContain("/");
+      expect(r.slug).not.toContain("-catalogue");
+      expect(r.slug).toBe(r.slug.toLowerCase());
+    }
   });
 });
 

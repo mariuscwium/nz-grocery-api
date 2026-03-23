@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { unlinkSync } from "fs";
-import { createDb, upsertSpecials, querySpecials } from "../src/lib/db.js";
+import { createDb, upsertSpecials, upsertRetailers, querySpecials } from "../src/lib/db.js";
 import type Database from "better-sqlite3";
 import type { Special } from "../src/lib/types.js";
 
@@ -174,5 +174,25 @@ describe("database", () => {
     const results = querySpecials(db, {});
     expect(results).toHaveLength(1);
     expect(results[0]?.sale_price_cents).toBe(300);
+  });
+
+  it("upserts retailers", () => {
+    upsertRetailers(db, [
+      { id: 1, name: "Pak'nSave", slug: "paknsave" },
+      { id: 2, name: "New World", slug: "new-world" },
+    ]);
+
+    const rows = db.prepare("SELECT * FROM retailers ORDER BY id").all() as Array<{ id: number; name: string; slug: string }>;
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.name).toBe("Pak'nSave");
+  });
+
+  it("updates retailer name on conflict", () => {
+    upsertRetailers(db, [{ id: 1, name: "Old Name", slug: "old" }]);
+    upsertRetailers(db, [{ id: 1, name: "New Name", slug: "new" }]);
+
+    const rows = db.prepare("SELECT * FROM retailers").all() as Array<{ id: number; name: string; slug: string }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.name).toBe("New Name");
   });
 });
