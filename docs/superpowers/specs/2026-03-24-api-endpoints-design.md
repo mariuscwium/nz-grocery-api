@@ -4,13 +4,18 @@
 
 ### GET /api/retailers
 
-Returns all retailers from the database.
+Returns distinct retailers from the specials table (the `retailers` table is unpopulated — derive from scraped data).
+
+**Query:** `SELECT DISTINCT retailer_id as id FROM specials`
+
+Note: retailer names/slugs are not currently scraped. This endpoint returns IDs only until the scraper is extended to capture retailer metadata.
 
 **Response:**
 ```json
 {
   "retailers": [
-    { "id": 1, "name": "Pak'nSave", "slug": "paknsave" }
+    { "id": 1 },
+    { "id": 2 }
   ]
 }
 ```
@@ -32,7 +37,7 @@ Basket query — accepts multiple search terms, returns cheapest matches per ite
 
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
-| items | yes | — | Array of search terms |
+| items | yes | — | Array of search terms (max 20) |
 | retailerIds | no | all | Filter to these stores |
 | memberRetailerIds | no | none | Include member-only deals for these retailers |
 | region | no | "Canterbury" | Region filter |
@@ -43,6 +48,12 @@ Basket query — accepts multiple search terms, returns cheapest matches per ite
 - If `memberRetailerIds` is provided, member deals are included only for those retailer IDs
 - Non-member deals are always included regardless
 
+**Query strategy:**
+- The API handler loops over `items` and calls `querySpecials` once per search term
+- `querySpecials` `QueryParams` is extended: `retailerId` (singular) becomes `retailerIds: number[]`, add `memberRetailerIds: number[]`
+- Items with NULL `sale_price_cents` are excluded (WHERE clause: `sale_price_cents IS NOT NULL`)
+- Existing `scripts/query.ts` caller updated for the `retailerIds` change
+
 **Response:**
 ```json
 {
@@ -51,6 +62,7 @@ Basket query — accepts multiple search terms, returns cheapest matches per ite
       {
         "id": 42,
         "productName": "Anchor Blue Milk 2L",
+        "description": "Limit 2 per customer",
         "salePriceCents": 399,
         "originalPriceCents": 549,
         "savingsCents": 150,
@@ -62,7 +74,7 @@ Basket query — accepts multiple search terms, returns cheapest matches per ite
         "retailerId": 1,
         "categoryId": 191,
         "region": "Canterbury",
-        "scrapedAt": "2025-03-24T00:00:00"
+        "scrapedAt": "2025-03-24T00:00:00Z"
       }
     ]
   },
@@ -73,21 +85,22 @@ Basket query — accepts multiple search terms, returns cheapest matches per ite
 }
 ```
 
-Response uses camelCase. Results ordered cheapest first per item.
+Response uses camelCase. `memberPrice` mapped from DB integer (0/1) to boolean. `scrapedAt` appends `Z` (DB stores UTC without suffix). Results ordered cheapest first per item.
 
 **Error responses:**
-- 400 if `items` is missing or empty
-- 400 if `items` is not an array
+- 400 if `items` is missing, empty, or not an array
 - 200 for success (empty results are valid)
 
 ## Implementation
 
 - Vercel serverless functions in root `api/` directory
-- `api/retailers.ts` — queries retailers table
-- `api/specials.ts` — validates input, queries per item with member pricing filter
-- Extend `querySpecials` in `src/lib/db.ts` to support `memberRetailerIds` parameter
+- `api/retailers.ts` — queries distinct retailer IDs from specials table
+- `api/specials.ts` — validates input, loops over items, calls `querySpecials` per item
+- Extend `QueryParams` in `src/lib/db.ts`: replace `retailerId` with `retailerIds`, add `memberRetailerIds`, add `sale_price_cents IS NOT NULL` condition
+- Update `scripts/query.ts` for the `retailerIds` change
 - Input validation at the API boundary
 
 ## Future
 
 - `GET /api/regions` — list available regions
+- Extend scraper to capture retailer name/slug for richer `/api/retailers` response
