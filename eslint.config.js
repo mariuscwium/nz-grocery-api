@@ -3,6 +3,7 @@ import tseslint from "typescript-eslint";
 import sonarjs from "eslint-plugin-sonarjs";
 
 export default [
+  { ignores: ["coverage/**", "node_modules/**"] },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   sonarjs.configs.recommended,
