@@ -1,12 +1,13 @@
-import { fetchPage } from "./fetch.js";
+import { createFetcher } from "./fetch.js";
 import { parseItems, hasNextPage } from "./parse.js";
 import { CATEGORIES } from "../lib/types.js";
 import type { Special } from "../lib/types.js";
+import type { Deps } from "../lib/deps.js";
 
-const REGION = process.env["REGION"] ?? "Canterbury";
 const MAX_PAGES = 30;
 
-async function scrapeCategory(
+export async function scrapeCategory(
+  deps: Deps,
   categoryId: number,
   path: string,
   region: string,
@@ -14,7 +15,7 @@ async function scrapeCategory(
   const allItems: Special[] = [];
 
   for (let page = 1; page <= MAX_PAGES; page++) {
-    const html = await fetchPage(path, page, region);
+    const html = await deps.fetcher.fetch(path, page, region);
     const items = parseItems(html, categoryId, region);
 
     if (items.length === 0) break;
@@ -26,16 +27,26 @@ async function scrapeCategory(
   return allItems;
 }
 
-async function main(): Promise<void> {
+export async function scrapeAll(deps: Deps, region: string): Promise<Special[]> {
   const allSpecials: Special[] = [];
 
   for (const cat of CATEGORIES) {
-    const items = await scrapeCategory(cat.id, cat.path, REGION);
+    const items = await scrapeCategory(deps, cat.id, cat.path, region);
     allSpecials.push(...items);
   }
 
-  // For now, output JSON. Supabase upsert comes next.
-  process.stdout.write(JSON.stringify(allSpecials, null, 2));
+  return allSpecials;
+}
+
+async function main(): Promise<void> {
+  const region = process.env["REGION"] ?? "Canterbury";
+  const deps: Deps = {
+    fetcher: createFetcher(),
+    output: { write: (data: string) => process.stdout.write(data) },
+  };
+
+  const specials = await scrapeAll(deps, region);
+  deps.output.write(JSON.stringify(specials, null, 2));
 }
 
 void main();

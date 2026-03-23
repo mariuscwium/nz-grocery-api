@@ -6,12 +6,12 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       thresholds: {
-        statements: 0,
-        branches: 0,
-        functions: 0,
-        lines: 0,
+        statements: 85,
+        branches: 75,
+        functions: 85,
+        lines: 85,
       },
-      exclude: ["**/*.config.*", "tests/**", "supabase/**"],
+      exclude: ["**/*.config.*", "tests/**", "twins/**", "supabase/**"],
     },
     testTimeout: 10_000,
   },
