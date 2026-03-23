@@ -111,7 +111,20 @@ interface QueryParams {
   offset?: number;
 }
 
-export function querySpecials(db: Database.Database, params: QueryParams): SpecialRow[] {
+interface ClauseTarget {
+  conditions: string[];
+  values: Record<string, unknown>;
+}
+
+function addInClause(ids: number[], prefix: string, column: string, target: ClauseTarget): void {
+  const placeholders = ids.map((_, i) => `@${prefix}${String(i)}`).join(", ");
+  target.conditions.push(`${column} IN (${placeholders})`);
+  for (let i = 0; i < ids.length; i++) {
+    target.values[`${prefix}${String(i)}`] = ids[i];
+  }
+}
+
+function buildConditions(params: QueryParams): { conditions: string[]; values: Record<string, unknown> } {
   const conditions: string[] = ["sale_price_cents IS NOT NULL"];
   const values: Record<string, unknown> = {};
 
@@ -124,19 +137,15 @@ export function querySpecials(db: Database.Database, params: QueryParams): Speci
     values["categoryId"] = params.categoryId;
   }
   if (params.retailerIds !== undefined && params.retailerIds.length > 0) {
-    const placeholders = params.retailerIds.map((_, i) => `@rid${String(i)}`).join(", ");
-    conditions.push(`retailer_id IN (${placeholders})`);
-    for (let i = 0; i < params.retailerIds.length; i++) {
-      values[`rid${String(i)}`] = params.retailerIds[i];
-    }
+    addInClause(params.retailerIds, "rid", "retailer_id", { conditions, values });
   }
   if (params.maxPriceCents !== undefined) {
     conditions.push("sale_price_cents <= @maxPriceCents");
     values["maxPriceCents"] = params.maxPriceCents;
   }
   if (params.memberRetailerIds !== undefined && params.memberRetailerIds.length > 0) {
-    const memberPlaceholders = params.memberRetailerIds.map((_, i) => `@mrid${String(i)}`).join(", ");
-    conditions.push(`(member_price = 0 OR retailer_id IN (${memberPlaceholders}))`);
+    const placeholders = params.memberRetailerIds.map((_, i) => `@mrid${String(i)}`).join(", ");
+    conditions.push(`(member_price = 0 OR retailer_id IN (${placeholders}))`);
     for (let i = 0; i < params.memberRetailerIds.length; i++) {
       values[`mrid${String(i)}`] = params.memberRetailerIds[i];
     }
@@ -148,13 +157,18 @@ export function querySpecials(db: Database.Database, params: QueryParams): Speci
     values["region"] = params.region;
   }
 
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  return { conditions, values };
+}
+
+export function querySpecials(db: Database.Database, params: QueryParams): SpecialRow[] {
+  const { conditions, values } = buildConditions(params);
+  const where = `WHERE ${conditions.join(" AND ")}`;
   const limit = params.limit ?? 20;
   const offset = params.offset ?? 0;
 
-  const sql = `SELECT * FROM specials ${where} ORDER BY sale_price_cents ASC LIMIT @limit OFFSET @offset`;
   values["limit"] = limit;
   values["offset"] = offset;
 
+  const sql = `SELECT * FROM specials ${where} ORDER BY sale_price_cents ASC LIMIT @limit OFFSET @offset`;
   return db.prepare(sql).all(values) as SpecialRow[];
 }

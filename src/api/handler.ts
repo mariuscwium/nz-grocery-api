@@ -20,7 +20,8 @@ export function handleSpecials(db: Database.Database, body: ValidBody): Specials
       region,
       limit: 1,
     });
-    results[item] = rows.length > 0 ? serializeSpecial(rows[0]!) : null;
+    const first = rows[0];
+    results[item] = first !== undefined ? serializeSpecial(first) : null;
   }
 
   return {
