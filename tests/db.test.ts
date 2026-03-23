@@ -176,6 +176,27 @@ describe("database", () => {
     expect(results[0]?.sale_price_cents).toBe(300);
   });
 
+  it("ranks exact word matches above substring matches", () => {
+    upsertSpecials(db, [
+      makeSpecial({ salefinderId: "1", productName: "Fireball Peanut Butter Whisky", salePriceCents: 100 }),
+      makeSpecial({ salefinderId: "2", productName: "Anchor Butter 500g", salePriceCents: 500 }),
+    ]);
+
+    const results = querySpecials(db, { q: "butter", limit: 1 });
+    expect(results[0]?.product_name).toBe("Anchor Butter 500g");
+  });
+
+  it("matches partial product names via FTS prefix", () => {
+    upsertSpecials(db, [
+      makeSpecial({ salefinderId: "1", productName: "Anchor Blue Milk 2L", salePriceCents: 400 }),
+      makeSpecial({ salefinderId: "2", productName: "White Bread Loaf", salePriceCents: 300 }),
+    ]);
+
+    const results = querySpecials(db, { q: "milk" });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.product_name).toContain("Milk");
+  });
+
   it("upserts retailers", () => {
     upsertRetailers(db, [
       { id: 1, name: "Pak'nSave", slug: "paknsave" },

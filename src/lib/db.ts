@@ -29,10 +29,22 @@ CREATE TABLE IF NOT EXISTS specials (
   UNIQUE(salefinder_item_id, salefinder_sale_id, region)
 );
 
-CREATE INDEX IF NOT EXISTS idx_specials_product ON specials(product_name);
 CREATE INDEX IF NOT EXISTS idx_specials_category ON specials(category_id);
 CREATE INDEX IF NOT EXISTS idx_specials_retailer ON specials(retailer_id);
 CREATE INDEX IF NOT EXISTS idx_specials_region ON specials(region);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS specials_fts USING fts5(product_name, content=specials, content_rowid=id);
+
+CREATE TRIGGER IF NOT EXISTS specials_ai AFTER INSERT ON specials BEGIN
+  INSERT INTO specials_fts(rowid, product_name) VALUES (new.id, new.product_name);
+END;
+CREATE TRIGGER IF NOT EXISTS specials_ad AFTER DELETE ON specials BEGIN
+  INSERT INTO specials_fts(specials_fts, rowid, product_name) VALUES('delete', old.id, old.product_name);
+END;
+CREATE TRIGGER IF NOT EXISTS specials_au AFTER UPDATE ON specials BEGIN
+  INSERT INTO specials_fts(specials_fts, rowid, product_name) VALUES('delete', old.id, old.product_name);
+  INSERT INTO specials_fts(rowid, product_name) VALUES (new.id, new.product_name);
+END;
 `;
 
 export function createDb(path: string): Database.Database {
@@ -40,6 +52,10 @@ export function createDb(path: string): Database.Database {
   db.pragma("journal_mode = WAL");
   db.exec(SCHEMA);
   return db;
+}
+
+export function rebuildFts(db: Database.Database): void {
+  db.exec("INSERT INTO specials_fts(specials_fts) VALUES('rebuild')");
 }
 
 export function upsertSpecials(db: Database.Database, specials: Special[]): number {
@@ -104,93 +120,5 @@ export function upsertRetailers(db: Database.Database, retailers: Retailer[]): v
   upsertMany(retailers);
 }
 
-export interface SpecialRow {
-  id: number;
-  product_name: string;
-  description: string | null;
-  sale_price_cents: number | null;
-  original_price_cents: number | null;
-  savings_cents: number | null;
-  multi_buy_qty: number | null;
-  multi_buy_price_cents: number | null;
-  unit_price_text: string | null;
-  member_price: number;
-  buy_url: string | null;
-  category_id: number;
-  retailer_id: number;
-  region: string;
-  scraped_at: string;
-}
-
-interface QueryParams {
-  q?: string;
-  categoryId?: number;
-  retailerIds?: number[];
-  maxPriceCents?: number;
-  memberRetailerIds?: number[];
-  region?: string;
-  limit?: number;
-  offset?: number;
-}
-
-interface ClauseTarget {
-  conditions: string[];
-  values: Record<string, unknown>;
-}
-
-function addInClause(ids: number[], prefix: string, column: string, target: ClauseTarget): void {
-  const placeholders = ids.map((_, i) => `@${prefix}${String(i)}`).join(", ");
-  target.conditions.push(`${column} IN (${placeholders})`);
-  for (let i = 0; i < ids.length; i++) {
-    target.values[`${prefix}${String(i)}`] = ids[i];
-  }
-}
-
-function buildConditions(params: QueryParams): { conditions: string[]; values: Record<string, unknown> } {
-  const conditions: string[] = ["sale_price_cents IS NOT NULL"];
-  const values: Record<string, unknown> = {};
-
-  if (params.q) {
-    conditions.push("product_name LIKE @q");
-    values["q"] = `%${params.q}%`;
-  }
-  if (params.categoryId !== undefined) {
-    conditions.push("category_id = @categoryId");
-    values["categoryId"] = params.categoryId;
-  }
-  if (params.retailerIds !== undefined && params.retailerIds.length > 0) {
-    addInClause(params.retailerIds, "rid", "retailer_id", { conditions, values });
-  }
-  if (params.maxPriceCents !== undefined) {
-    conditions.push("sale_price_cents <= @maxPriceCents");
-    values["maxPriceCents"] = params.maxPriceCents;
-  }
-  if (params.memberRetailerIds !== undefined && params.memberRetailerIds.length > 0) {
-    const placeholders = params.memberRetailerIds.map((_, i) => `@mrid${String(i)}`).join(", ");
-    conditions.push(`(member_price = 0 OR retailer_id IN (${placeholders}))`);
-    for (let i = 0; i < params.memberRetailerIds.length; i++) {
-      values[`mrid${String(i)}`] = params.memberRetailerIds[i];
-    }
-  } else {
-    conditions.push("member_price = 0");
-  }
-  if (params.region) {
-    conditions.push("region = @region");
-    values["region"] = params.region;
-  }
-
-  return { conditions, values };
-}
-
-export function querySpecials(db: Database.Database, params: QueryParams): SpecialRow[] {
-  const { conditions, values } = buildConditions(params);
-  const where = `WHERE ${conditions.join(" AND ")}`;
-  const limit = params.limit ?? 20;
-  const offset = params.offset ?? 0;
-
-  values["limit"] = limit;
-  values["offset"] = offset;
-
-  const sql = `SELECT * FROM specials ${where} ORDER BY sale_price_cents ASC LIMIT @limit OFFSET @offset`;
-  return db.prepare(sql).all(values) as SpecialRow[];
-}
+export { querySpecials } from "./query.js";
+export type { SpecialRow } from "./query.js";
