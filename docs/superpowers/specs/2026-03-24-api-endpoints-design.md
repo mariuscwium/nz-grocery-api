@@ -22,16 +22,15 @@ Note: retailer names/slugs are not currently scraped. This endpoint returns IDs 
 
 ### POST /api/specials
 
-Basket query — accepts multiple search terms, returns cheapest matches per item.
+Basket query — accepts multiple search terms, returns the single cheapest match per item.
 
 **Request body:**
 ```json
 {
-  "items": ["milk", "bread", "eggs"],
+  "items": ["milk", "bread", "eggs", "flour"],
   "retailerIds": [1, 3],
   "memberRetailerIds": [1],
-  "region": "Canterbury",
-  "limit": 5
+  "region": "Canterbury"
 }
 ```
 
@@ -41,7 +40,6 @@ Basket query — accepts multiple search terms, returns cheapest matches per ite
 | retailerIds | no | all | Filter to these stores |
 | memberRetailerIds | no | none | Include member-only deals for these retailers |
 | region | no | "Canterbury" | Region filter |
-| limit | no | 5 | Max results per item |
 
 **Member pricing logic:**
 - Rows where `member_price = 1` are excluded by default
@@ -49,34 +47,43 @@ Basket query — accepts multiple search terms, returns cheapest matches per ite
 - Non-member deals are always included regardless
 
 **Query strategy:**
-- The API handler loops over `items` and calls `querySpecials` once per search term
+- The API handler loops over `items` and calls `querySpecials` once per search term with `limit: 1`
 - `querySpecials` `QueryParams` is extended: `retailerId` (singular) becomes `retailerIds: number[]`, add `memberRetailerIds: number[]`
 - Items with NULL `sale_price_cents` are excluded (WHERE clause: `sale_price_cents IS NOT NULL`)
 - Existing `scripts/query.ts` caller updated for the `retailerIds` change
 
 **Response:**
+
+Each key in `results` maps to the cheapest matching special, or `null` if no current special was found.
+
 ```json
 {
   "results": {
-    "milk": [
-      {
-        "id": 42,
-        "productName": "Anchor Blue Milk 2L",
-        "description": "Limit 2 per customer",
-        "salePriceCents": 399,
-        "originalPriceCents": 549,
-        "savingsCents": 150,
-        "multiBuyQty": null,
-        "multiBuyPriceCents": null,
-        "unitPriceText": "$2.00/L",
-        "memberPrice": false,
-        "buyUrl": "https://...",
-        "retailerId": 1,
-        "categoryId": 191,
-        "region": "Canterbury",
-        "scrapedAt": "2025-03-24T00:00:00Z"
-      }
-    ]
+    "milk": {
+      "id": 42,
+      "productName": "Anchor Blue Milk 2L",
+      "description": "Limit 2 per customer",
+      "salePriceCents": 399,
+      "originalPriceCents": 549,
+      "savingsCents": 150,
+      "multiBuyQty": null,
+      "multiBuyPriceCents": null,
+      "unitPriceText": "$2.00/L",
+      "memberPrice": false,
+      "buyUrl": "https://...",
+      "retailerId": 1,
+      "categoryId": 191,
+      "region": "Canterbury",
+      "scrapedAt": "2025-03-24T00:00:00Z"
+    },
+    "bread": {
+      "id": 87,
+      "productName": "Nature's Fresh Toast White",
+      "salePriceCents": 250,
+      "..."
+    },
+    "eggs": null,
+    "flour": null
   },
   "meta": {
     "region": "Canterbury",
@@ -85,7 +92,7 @@ Basket query — accepts multiple search terms, returns cheapest matches per ite
 }
 ```
 
-Response uses camelCase. `memberPrice` mapped from DB integer (0/1) to boolean. `scrapedAt` appends `Z` (DB stores UTC without suffix). Results ordered cheapest first per item.
+Response uses camelCase. `memberPrice` mapped from DB integer (0/1) to boolean. `scrapedAt` appends `Z` (DB stores UTC without suffix).
 
 **Error responses:**
 - 400 if `items` is missing, empty, or not an array
