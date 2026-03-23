@@ -39,14 +39,19 @@ export async function scrapeAll(deps: Deps, region: string): Promise<Special[]> 
 }
 
 async function main(): Promise<void> {
+  const { createDb, upsertSpecials } = await import("../lib/db.js");
   const region = process.env["REGION"] ?? "Canterbury";
+  const dbPath = process.env["DB_PATH"] ?? "specials.db";
   const deps: Deps = {
     fetcher: createFetcher(),
     output: { write: (data: string) => process.stdout.write(data) },
   };
 
   const specials = await scrapeAll(deps, region);
-  deps.output.write(JSON.stringify(specials, null, 2));
+  const db = createDb(dbPath);
+  const count = upsertSpecials(db, specials);
+  db.close();
+  deps.output.write(`Scraped ${String(count)} specials into ${dbPath}\n`);
 }
 
 void main();

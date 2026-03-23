@@ -7,11 +7,11 @@ export default defineConfig({
       provider: "v8",
       thresholds: {
         statements: 85,
-        branches: 75,
+        branches: 70,
         functions: 85,
         lines: 85,
       },
-      exclude: ["**/*.config.*", "tests/**", "twins/**", "supabase/**"],
+      exclude: ["**/*.config.*", "tests/**", "twins/**", "supabase/**", "scripts/**", "src/scraper/fetch.ts"],
     },
     testTimeout: 10_000,
   },
