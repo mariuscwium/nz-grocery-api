@@ -126,7 +126,30 @@ describe("database", () => {
   it("stores member price flag", () => {
     upsertSpecials(db, [makeSpecial({ memberPrice: true })]);
 
-    const rows = querySpecials(db, {});
+    const rows = querySpecials(db, { memberRetailerIds: [1] });
     expect(rows[0]?.member_price).toBe(1);
+  });
+
+  it("filters by multiple retailer IDs", () => {
+    upsertSpecials(db, [
+      makeSpecial({ salefinderId: "1", retailerId: 1, productName: "A" }),
+      makeSpecial({ salefinderId: "2", retailerId: 2, productName: "B" }),
+      makeSpecial({ salefinderId: "3", retailerId: 3, productName: "C" }),
+    ]);
+
+    const results = querySpecials(db, { retailerIds: [1, 3] });
+    expect(results).toHaveLength(2);
+    expect(results.map(r => r.retailer_id)).toEqual([1, 3]);
+  });
+
+  it("excludes items with null sale_price_cents", () => {
+    upsertSpecials(db, [
+      makeSpecial({ salefinderId: "1", salePriceCents: 300 }),
+      makeSpecial({ salefinderId: "2", salePriceCents: null }),
+    ]);
+
+    const results = querySpecials(db, {});
+    expect(results).toHaveLength(1);
+    expect(results[0]?.sale_price_cents).toBe(300);
   });
 });

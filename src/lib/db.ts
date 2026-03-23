@@ -103,15 +103,16 @@ export interface SpecialRow {
 interface QueryParams {
   q?: string;
   categoryId?: number;
-  retailerId?: number;
+  retailerIds?: number[];
   maxPriceCents?: number;
+  memberRetailerIds?: number[];
   region?: string;
   limit?: number;
   offset?: number;
 }
 
 export function querySpecials(db: Database.Database, params: QueryParams): SpecialRow[] {
-  const conditions: string[] = [];
+  const conditions: string[] = ["sale_price_cents IS NOT NULL"];
   const values: Record<string, unknown> = {};
 
   if (params.q) {
@@ -122,13 +123,25 @@ export function querySpecials(db: Database.Database, params: QueryParams): Speci
     conditions.push("category_id = @categoryId");
     values["categoryId"] = params.categoryId;
   }
-  if (params.retailerId !== undefined) {
-    conditions.push("retailer_id = @retailerId");
-    values["retailerId"] = params.retailerId;
+  if (params.retailerIds !== undefined && params.retailerIds.length > 0) {
+    const placeholders = params.retailerIds.map((_, i) => `@rid${String(i)}`).join(", ");
+    conditions.push(`retailer_id IN (${placeholders})`);
+    for (let i = 0; i < params.retailerIds.length; i++) {
+      values[`rid${String(i)}`] = params.retailerIds[i];
+    }
   }
   if (params.maxPriceCents !== undefined) {
     conditions.push("sale_price_cents <= @maxPriceCents");
     values["maxPriceCents"] = params.maxPriceCents;
+  }
+  if (params.memberRetailerIds !== undefined && params.memberRetailerIds.length > 0) {
+    const memberPlaceholders = params.memberRetailerIds.map((_, i) => `@mrid${String(i)}`).join(", ");
+    conditions.push(`(member_price = 0 OR retailer_id IN (${memberPlaceholders}))`);
+    for (let i = 0; i < params.memberRetailerIds.length; i++) {
+      values[`mrid${String(i)}`] = params.memberRetailerIds[i];
+    }
+  } else {
+    conditions.push("member_price = 0");
   }
   if (params.region) {
     conditions.push("region = @region");
